@@ -43,9 +43,6 @@ dependencies:
   hive_flutter: 1.1.0
   shared_preferences: 2.5.3
 
-  # Rich icon set (for guitar, dumbbell, etc. not in Material Icons)
-  font_awesome_flutter: ^10.8.0
-
   # Date formatting
   intl: ^0.20.2
 
