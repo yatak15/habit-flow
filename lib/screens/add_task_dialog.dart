@@ -4,8 +4,10 @@ import '../models/task_icon.dart';
 import '../services/task_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/task_icon_widget.dart';
+import '../widgets/habit_flow_widgets.dart';
 
 /// 新規タスク作成ダイアログ（例：ピアノ10分レッスン、ギター10分練習）
+/// "Quiet Momentum" デザインに合わせたスタイル
 class AddTaskDialog extends StatefulWidget {
   const AddTaskDialog({super.key});
 
@@ -28,7 +30,8 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      backgroundColor: AppColors.cream,
+      backgroundColor: AppColors.bg,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: SingleChildScrollView(
@@ -36,65 +39,74 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '新しいタスク',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.textPrimary,
-                ),
-              ),
+              Text('新しいタスク', style: AppText.h2Section),
               const SizedBox(height: 20),
-              TextField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  hintText: '例：ピアノ 10分レッスン',
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: TextField(
+                  controller: _nameController,
+                  style: AppText.body.copyWith(fontSize: 15),
+                  decoration: const InputDecoration(
+                    hintText: '例：ピアノ 10分レッスン',
+                    hintStyle: TextStyle(
+                      color: AppColors.inkMuted,
+                      fontSize: 15,
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              const Text('アイコンを選択', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+              const SizedBox(height: 22),
+              Text('アイコンを選択', style: AppText.subMeta.copyWith(fontSize: 13)),
               const SizedBox(height: 12),
               TaskIconPicker(
                 selected: _selectedIcon,
                 onSelected: (t) => setState(() => _selectedIcon = t),
               ),
-              const SizedBox(height: 20),
-              const Text('タイマー時間', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-              const SizedBox(height: 8),
+              const SizedBox(height: 22),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Slider(
-                      value: _minutes.toDouble(),
-                      min: 1,
-                      max: 60,
-                      divisions: 59,
-                      activeColor: AppColors.sage,
-                      inactiveColor: AppColors.divider,
-                      label: '$_minutes分',
-                      onChanged: (v) => setState(() => _minutes = v.round()),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 48,
-                    child: Text('$_minutes分', textAlign: TextAlign.right,
-                      style: const TextStyle(color: AppColors.textPrimary)),
+                  Text('タイマー時間', style: AppText.subMeta.copyWith(fontSize: 13)),
+                  Text(
+                    '$_minutes分',
+                    style: AppText.cardLabel.copyWith(fontSize: 14),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              SliderTheme(
+                data: hfSliderTheme(),
+                child: Slider(
+                  value: _minutes.toDouble(),
+                  min: 5,
+                  max: 60,
+                  divisions: 11,
+                  onChanged: (v) => setState(() => _minutes = v.round()),
+                ),
+              ),
+              const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
                     child: TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('キャンセル', style: TextStyle(color: AppColors.textSecondary)),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: Text(
+                        'キャンセル',
+                        style: AppText.cardLabel.copyWith(
+                          color: AppColors.inkSub,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -111,6 +123,9 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                         );
                         if (context.mounted) Navigator.pop(context, task);
                       },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
                       child: const Text('追加'),
                     ),
                   ),

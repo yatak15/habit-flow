@@ -35,7 +35,8 @@ class HabitFlowApp extends StatefulWidget {
   State<HabitFlowApp> createState() => _HabitFlowAppState();
 }
 
-class _HabitFlowAppState extends State<HabitFlowApp> with WidgetsBindingObserver {
+class _HabitFlowAppState extends State<HabitFlowApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();

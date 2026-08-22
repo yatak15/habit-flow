@@ -7,7 +7,11 @@ class Prize {
   final String title;
   final IconData icon;
 
-  const Prize({required this.requiredDays, required this.title, required this.icon});
+  const Prize({
+    required this.requiredDays,
+    required this.title,
+    required this.icon,
+  });
 }
 
 class PrizeService {
@@ -16,7 +20,11 @@ class PrizeService {
     Prize(requiredDays: 7, title: '1週間継続', icon: Icons.local_florist_outlined),
     Prize(requiredDays: 14, title: '2週間継続', icon: Icons.eco_outlined),
     Prize(requiredDays: 30, title: '1ヶ月継続', icon: Icons.emoji_events_outlined),
-    Prize(requiredDays: 100, title: '100日継続', icon: Icons.workspace_premium_outlined),
+    Prize(
+      requiredDays: 100,
+      title: '100日継続',
+      icon: Icons.workspace_premium_outlined,
+    ),
     Prize(requiredDays: 365, title: '1年継続', icon: Icons.auto_awesome_outlined),
   ];
 

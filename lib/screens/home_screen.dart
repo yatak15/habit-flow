@@ -5,11 +5,15 @@ import '../models/task.dart';
 import '../services/task_service.dart';
 import '../services/prize_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/task_icon_widget.dart';
+import '../widgets/habit_flow_widgets.dart';
 import 'add_task_dialog.dart';
 import 'timer_screen.dart';
 
-/// ホーム画面：1.起動 → 2.タスク選択 → 3.メモ入力 → 4.タイマーセット
+const List<String> _kWeekdayKanji = ['月', '火', '水', '木', '金', '土', '日'];
+
+/// ホーム画面："Quiet Momentum" デザイン
+/// デフォルト状態：日付・週次モメンタム・本日のタスク一覧
+/// 選択状態：継続実績チップ・メモ・タイマー設定・開始 CTA
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -30,9 +34,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _selectTask(Task task) {
     setState(() {
-      _selectedTask = task;
-      _memoController.text = task.lastMemo;
-      _minutes = task.defaultMinutes;
+      if (_selectedTask?.id == task.id) {
+        // 再タップで選択解除
+        _selectedTask = null;
+        _memoController.clear();
+      } else {
+        _selectedTask = task;
+        _memoController.text = task.lastMemo;
+        _minutes = task.defaultMinutes;
+      }
     });
   }
 
@@ -42,7 +52,11 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (_) => const AddTaskDialog(),
     );
     if (task != null) {
-      _selectTask(task);
+      setState(() {
+        _selectedTask = task;
+        _memoController.text = task.lastMemo;
+        _minutes = task.defaultMinutes;
+      });
     }
   }
 
@@ -63,220 +77,299 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  String _shortLabel(String name) {
+    final parts = name.split(RegExp(r'\s+'));
+    return parts.isNotEmpty ? parts.first : name;
+  }
+
   @override
   Widget build(BuildContext context) {
     final taskService = context.watch<TaskService>();
     final tasks = taskService.tasks;
-    final today = DateFormat('yyyy年M月d日 (E)', 'ja_JP').format(DateTime.now());
+    final now = DateTime.now();
+    final dateStr = DateFormat('yyyy年M月d日', 'ja_JP').format(now);
+    final weekday = _kWeekdayKanji[now.weekday - 1];
+    final eyebrow = '$dateStr · $weekday';
+
+    final selected = _selectedTask;
+    // 選択タスクが削除されていた場合のガード
+    final selectedStillExists =
+        selected != null && tasks.any((t) => t.id == selected.id);
+    final activeTask = selectedStillExists
+        ? tasks.firstWhere((t) => t.id == selected.id)
+        : null;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Habit Flow', style: TextStyle(letterSpacing: 1)),
-      ),
+      backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(today, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-              const SizedBox(height: 20),
-              const Text('本日のタスク', style: TextStyle(fontSize: 18, color: AppColors.textPrimary)),
-              const SizedBox(height: 12),
-              _buildTaskList(tasks),
-              const SizedBox(height: 28),
-              if (_selectedTask != null) _buildDetailSection(),
-            ],
-          ),
+        bottom: false,
+        child: Stack(
+          children: [
+            SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                24,
+                0,
+                24,
+                activeTask != null ? 132 : 28,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  HeroHeader(
+                    eyebrow: eyebrow,
+                    title: activeTask == null
+                        ? '今日も、\n静かに続ける。'
+                        : '${_shortLabel(activeTask.name)}の時間。',
+                    titleStyle: activeTask == null
+                        ? AppText.heroHome
+                        : AppText.heroSelected,
+                    padding: EdgeInsets.only(
+                      top: 4,
+                      bottom: activeTask == null ? 32 : 24,
+                    ),
+                  ),
+                  if (activeTask == null) ...[
+                    MomentumStrip(
+                      weeklyCount: taskService.weeklyExecutionCount,
+                      longestStreak: taskService.overallLongestStreak,
+                      daysToNextPrize: _daysToNextPrize(
+                        taskService.topStreakTask,
+                      ),
+                    ),
+                    const SizedBox(height: 36),
+                    Row(
+                      children: [
+                        Text('本日のタスク', style: AppText.h2Section),
+                        const SizedBox(width: 8),
+                        Text('${tasks.length}件', style: AppText.subMeta),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTaskStrip(tasks, compact: false),
+                    const PromptCard(
+                      title: 'タスクを選ぶと始められます',
+                      body: 'カードをタップして、メモを書き、タイマーをセット。3ステップで今日の一歩を。',
+                    ),
+                  ] else ...[
+                    _buildTaskStrip(tasks, compact: true),
+                    const SizedBox(height: 24),
+                    _buildStreakChips(activeTask),
+                    const SizedBox(height: 20),
+                    _buildProgressMeter(activeTask),
+                    const SizedBox(height: 28),
+                    Text(
+                      'やることをメモ',
+                      style: AppText.cardLabel.copyWith(fontSize: 13),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildMemoField(),
+                    const SizedBox(height: 28),
+                    _buildTimerSection(),
+                  ],
+                ],
+              ),
+            ),
+            if (activeTask != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [AppColors.bg.withValues(alpha: 0), AppColors.bg],
+                      stops: const [0, 0.4],
+                    ),
+                  ),
+                  child: PrimaryCta(
+                    label: '$_minutes分のタイマーを開始',
+                    onPressed: _startTimer,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildTaskList(List<Task> tasks) {
+  int? _daysToNextPrize(Task? task) {
+    if (task == null) return null;
+    final next = PrizeService.nextPrize(task.currentStreak);
+    if (next == null) return null;
+    return next.requiredDays - task.currentStreak;
+  }
+
+  Widget _buildTaskStrip(List<Task> tasks, {required bool compact}) {
+    final double height = compact ? 108 : 132;
     return SizedBox(
-      height: 108,
+      height: height,
       child: ListView(
         scrollDirection: Axis.horizontal,
+        clipBehavior: Clip.none,
         children: [
           ...tasks.map((task) {
             final isSelected = _selectedTask?.id == task.id;
             return Padding(
               padding: const EdgeInsets.only(right: 12),
-              child: GestureDetector(
+              child: TaskCardWidget(
+                icon: task.iconType,
+                label: task.name,
+                streak: task.currentStreak,
+                selected: isSelected,
+                compact: compact,
                 onTap: () => _selectTask(task),
-                child: Container(
-                  width: 96,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: isSelected ? AppColors.sage : Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: isSelected ? AppColors.sage : AppColors.divider,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      TaskIconWidget(
-                        iconType: task.iconType,
-                        size: 36,
-                        backgroundColor: isSelected ? Colors.white : AppColors.sageLight,
-                        iconColor: isSelected ? AppColors.sage : AppColors.sageDark,
-                      ),
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Text(
-                          task.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isSelected ? Colors.white : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             );
           }),
-          GestureDetector(
-            onTap: _openAddTaskDialog,
-            child: Container(
-              width: 96,
-              decoration: BoxDecoration(
-                color: AppColors.creamDark,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: AppColors.divider, style: BorderStyle.solid),
-              ),
-              alignment: Alignment.center,
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add, color: AppColors.textSecondary),
-                  SizedBox(height: 6),
-                  Text('追加', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                ],
-              ),
-            ),
-          ),
+          AddTaskCardWidget(compact: compact, onTap: _openAddTaskDialog),
         ],
       ),
     );
   }
 
-  Widget _buildDetailSection() {
-    final task = _selectedTask!;
-    final nextPrize = PrizeService.nextPrize(task.currentStreak);
+  Widget _buildStreakChips(Task task) {
     final currentPrize = PrizeService.currentPrize(task.currentStreak);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        StreakChip(
+          icon: Icons.local_fire_department_outlined,
+          label: '継続${task.currentStreak}日',
+        ),
+        StreakChip(icon: Icons.repeat, label: '実行${task.totalCount}回'),
+        if (currentPrize != null)
+          StreakChip(
+            icon: currentPrize.icon,
+            label: currentPrize.title,
+            accent: true,
+          ),
+      ],
+    );
+  }
 
+  Widget _buildProgressMeter(Task task) {
+    final next = PrizeService.nextPrize(task.currentStreak);
+    if (next == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.terraSoft,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.auto_awesome,
+              size: 16,
+              color: AppColors.terracotta,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'すべてのプライズを達成しました',
+              style: AppText.chipLabel.copyWith(color: AppColors.terracotta),
+            ),
+          ],
+        ),
+      );
+    }
+    final remaining = (next.requiredDays - task.currentStreak).clamp(
+      0,
+      next.requiredDays,
+    );
+    final progress = next.requiredDays == 0
+        ? 0.0
+        : task.currentStreak / next.requiredDays;
+    return ProgressMeter(
+      progress: progress,
+      daysRemaining: remaining,
+      nextPrizeTitle: next.title,
+    );
+  }
+
+  Widget _buildMemoField() {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 96),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.line),
+      ),
+      padding: const EdgeInsets.all(18),
+      child: TextField(
+        controller: _memoController,
+        maxLines: null,
+        minLines: 2,
+        style: AppText.body,
+        decoration: const InputDecoration(
+          hintText: '例：ダイアトニックコード、指板上の音名',
+          hintStyle: TextStyle(
+            color: AppColors.inkMuted,
+            fontSize: 15,
+            height: 1.6,
+          ),
+          border: InputBorder.none,
+          isCollapsed: true,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimerSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _StatChip(
-              icon: Icons.local_fire_department_outlined,
-              label: '継続 ${task.currentStreak}日',
-            ),
-            const SizedBox(width: 10),
-            _StatChip(
-              icon: Icons.repeat,
-              label: '実行 ${task.totalCount}回',
-            ),
-            if (currentPrize != null) ...[
-              const SizedBox(width: 10),
-              _StatChip(
-                icon: currentPrize.icon,
-                label: currentPrize.title,
-                color: AppColors.accentGold,
+            Text('タイマー時間', style: AppText.cardLabel.copyWith(fontSize: 13)),
+            RichText(
+              text: TextSpan(
+                style: AppText.timerValue,
+                children: [
+                  TextSpan(text: '$_minutes'),
+                  const TextSpan(
+                    text: ' 分',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: AppColors.inkSub,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ],
-        ),
-        if (nextPrize != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            '次のプライズまで あと ${nextPrize.requiredDays - task.currentStreak}日（${nextPrize.title}）',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-          ),
-        ],
-        const SizedBox(height: 24),
-        const Text('やることをメモ', style: TextStyle(fontSize: 15, color: AppColors.textPrimary)),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _memoController,
-          maxLines: 2,
-          decoration: InputDecoration(
-            hintText: '例：バイエル No.32、コード進行の練習',
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppColors.divider),
             ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            const Text('タイマー時間', style: TextStyle(fontSize: 15, color: AppColors.textPrimary)),
-            const Spacer(),
-            Text('$_minutes 分', style: const TextStyle(fontSize: 15, color: AppColors.sageDark)),
           ],
         ),
-        Slider(
-          value: _minutes.toDouble(),
-          min: 1,
-          max: 60,
-          divisions: 59,
-          activeColor: AppColors.sage,
-          inactiveColor: AppColors.divider,
-          onChanged: (v) => setState(() => _minutes = v.round()),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: _startTimer,
-            icon: const Icon(Icons.play_circle_outline),
-            label: const Text('タイマーをセットしてスタート'),
+        SliderTheme(
+          data: hfSliderTheme(),
+          child: Slider(
+            value: _minutes.toDouble(),
+            min: 5,
+            max: 60,
+            divisions: 11,
+            onChanged: (v) => setState(() => _minutes = v.round()),
           ),
         ),
-        const SizedBox(height: 24),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              Text('5分', style: AppText.microLabel),
+              Text('15分', style: AppText.microLabel),
+              Text('30分', style: AppText.microLabel),
+              Text('60分', style: AppText.microLabel),
+            ],
+          ),
+        ),
       ],
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color? color;
-
-  const _StatChip({required this.icon, required this.label, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = color ?? AppColors.sageDark;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: c.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: c),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 12, color: c)),
-        ],
-      ),
     );
   }
 }

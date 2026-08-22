@@ -80,9 +80,9 @@ class _TimerScreenState extends State<TimerScreen> {
   Future<void> _onFinished() async {
     // タイマー終了音的な役割としてバイブ等は省略、UIで通知
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('タイマー終了！お疲れさまでした')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('タイマー終了！お疲れさまでした')));
     }
   }
 
@@ -116,10 +116,20 @@ class _TimerScreenState extends State<TimerScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('継続日数： $updatedStreak 日',
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 16)),
-            Text('総実行回数： ${widget.task.totalCount} 回',
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+            Text(
+              '継続日数： $updatedStreak 日',
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+              ),
+            ),
+            Text(
+              '総実行回数： ${widget.task.totalCount} 回',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+              ),
+            ),
             if (achieved != null) ...[
               const SizedBox(height: 16),
               Row(
@@ -127,9 +137,13 @@ class _TimerScreenState extends State<TimerScreen> {
                   Icon(achieved.icon, color: AppColors.accentGold, size: 28),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text('プライズ獲得：${achieved.title}',
-                        style: const TextStyle(
-                            color: AppColors.accentGold, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      'プライズ獲得：${achieved.title}',
+                      style: const TextStyle(
+                        color: AppColors.accentGold,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -157,7 +171,9 @@ class _TimerScreenState extends State<TimerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final progress = _totalSeconds == 0 ? 0.0 : 1 - (_remainingSeconds / _totalSeconds);
+    final progress = _totalSeconds == 0
+        ? 0.0
+        : 1 - (_remainingSeconds / _totalSeconds);
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.task.name)),
@@ -173,7 +189,10 @@ class _TimerScreenState extends State<TimerScreen> {
                 Text(
                   widget.memo,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
                 ),
               const Spacer(),
               SizedBox(
@@ -189,7 +208,9 @@ class _TimerScreenState extends State<TimerScreen> {
                         value: progress,
                         strokeWidth: 4,
                         backgroundColor: AppColors.divider,
-                        valueColor: const AlwaysStoppedAnimation(AppColors.sage),
+                        valueColor: const AlwaysStoppedAnimation(
+                          AppColors.sage,
+                        ),
                       ),
                     ),
                     Column(
@@ -205,8 +226,12 @@ class _TimerScreenState extends State<TimerScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _state == TimerState.finished ? '完了' : '${widget.minutes}分',
-                          style: const TextStyle(color: AppColors.textSecondary),
+                          _state == TimerState.finished
+                              ? '完了'
+                              : '${widget.minutes}分',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -241,10 +266,15 @@ class _TimerScreenState extends State<TimerScreen> {
           child: OutlinedButton.icon(
             onPressed: _reset,
             icon: const Icon(Icons.replay, color: AppColors.textSecondary),
-            label: const Text('リセット', style: TextStyle(color: AppColors.textSecondary)),
+            label: const Text(
+              'リセット',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               side: const BorderSide(color: AppColors.divider),
             ),
           ),
@@ -253,7 +283,9 @@ class _TimerScreenState extends State<TimerScreen> {
         Expanded(
           child: ElevatedButton.icon(
             onPressed: _state == TimerState.running ? _pause : _resume,
-            icon: Icon(_state == TimerState.running ? Icons.pause : Icons.play_arrow),
+            icon: Icon(
+              _state == TimerState.running ? Icons.pause : Icons.play_arrow,
+            ),
             label: Text(_state == TimerState.running ? '一時停止' : '再開'),
           ),
         ),
@@ -268,9 +300,7 @@ class _TimerScreenState extends State<TimerScreen> {
         onPressed: _cleared ? null : _markClear,
         icon: Icon(_cleared ? Icons.check_circle : Icons.flag_outlined),
         label: Text(_cleared ? '記録済み' : 'クリアを記録する'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.accentGold,
-        ),
+        style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentGold),
       ),
     );
   }

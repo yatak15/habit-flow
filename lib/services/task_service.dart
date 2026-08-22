@@ -12,11 +12,13 @@ class TaskService extends ChangeNotifier {
   late Box<Task> _taskBox;
   late Box<CompletionLog> _logBox;
 
-  List<Task> get tasks => _taskBox.values.toList()
-    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  List<Task> get tasks =>
+      _taskBox.values.toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-  List<CompletionLog> get logs => _logBox.values.toList()
-    ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
+  List<CompletionLog> get logs =>
+      _logBox.values.toList()
+        ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
 
   Future<void> init() async {
     _taskBox = await Hive.openBox<Task>(taskBoxName);
@@ -64,7 +66,11 @@ class TaskService extends ChangeNotifier {
   }
 
   /// タイマー終了時：完了記録の追加 + 実行回数/継続日数の更新
-  Future<void> completeTask(Task task, {required String memo, required int minutes}) async {
+  Future<void> completeTask(
+    Task task, {
+    required String memo,
+    required int minutes,
+  }) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -114,6 +120,45 @@ class TaskService extends ChangeNotifier {
   List<CompletionLog> logsForTask(String taskId) {
     return logs.where((l) => l.taskId == taskId).toList();
   }
+
+  DateTime get _startOfWeek {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return today.subtract(Duration(days: today.weekday - 1)); // 月曜始まり
+  }
+
+  DateTime get _startOfMonth {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, 1);
+  }
+
+  /// 今週（月曜〜）の全タスク合計実行回数（Momentum Strip用）
+  int get weeklyExecutionCount =>
+      logs.where((l) => !l.completedAt.isBefore(_startOfWeek)).length;
+
+  /// 全タスクの中での最長継続日数（Momentum Strip用）
+  int get overallLongestStreak {
+    if (tasks.isEmpty) return 0;
+    return tasks.map((t) => t.bestStreak).reduce((a, b) => a > b ? a : b);
+  }
+
+  /// 現在継続日数が最も高いタスク（次のプライズ表示の基準に使用）
+  Task? get topStreakTask {
+    if (tasks.isEmpty) return null;
+    final sorted = [...tasks]
+      ..sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+    return sorted.first;
+  }
+
+  /// 指定期間（週/月）内のログのみに絞り込む
+  List<CompletionLog> logsForTaskSince(String taskId, DateTime since) {
+    return logsForTask(
+      taskId,
+    ).where((l) => !l.completedAt.isBefore(since)).toList();
+  }
+
+  DateTime get startOfWeek => _startOfWeek;
+  DateTime get startOfMonth => _startOfMonth;
 
   String _generateId() {
     final rand = Random();
