@@ -99,6 +99,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ? tasks.firstWhere((t) => t.id == selected.id)
         : null;
 
+    final tabBarReserved = HFTabBar.reservedHeight(context);
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: SafeArea(
@@ -110,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 24,
                 0,
                 24,
-                activeTask != null ? 132 : 28,
+                tabBarReserved + (activeTask != null ? 88 : 20),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -173,9 +175,9 @@ class _HomeScreenState extends State<HomeScreen> {
               Positioned(
                 left: 0,
                 right: 0,
-                bottom: 0,
+                bottom: tabBarReserved,
                 child: Container(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,

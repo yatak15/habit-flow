@@ -447,11 +447,22 @@ class PrimaryCta extends StatelessWidget {
 }
 
 /// カスタムタブバー（半透明＋ブラー）
+/// 必要最低限のサイズに最適化。各画面はスクロール末尾で
+/// [HFTabBar.reservedHeight] 分の余白を確保することで、
+/// コンテンツがタブバーの下に隠れないようにする。
 class HFTabBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
   const HFTabBar({super.key, required this.currentIndex, required this.onTap});
+
+  /// セーフエリアを除いたタブバー本体の高さ
+  static const double contentHeight = 56;
+
+  /// 画面がスクロール末尾に確保すべき合計高さ（セーフエリア込み）
+  static double reservedHeight(BuildContext context) {
+    return contentHeight + MediaQuery.of(context).padding.bottom;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -460,8 +471,8 @@ class HFTabBar extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: EdgeInsets.only(
-            top: 10,
-            bottom: MediaQuery.of(context).padding.bottom + 10,
+            top: 6,
+            bottom: MediaQuery.of(context).padding.bottom + 6,
           ),
           decoration: BoxDecoration(
             color: AppColors.bg.withValues(alpha: 0.92),
@@ -489,20 +500,20 @@ class HFTabBar extends StatelessWidget {
       onTap: () => onTap(index),
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
-              size: 24,
+              size: 21,
               color: active ? AppColors.sageDeep : AppColors.inkMuted,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                 color: active ? AppColors.sageDeep : AppColors.inkMuted,
                 letterSpacing: 0.2,

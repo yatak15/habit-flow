@@ -34,7 +34,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
         child: tasks.isEmpty
             ? _buildEmpty()
             : ListView(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  0,
+                  24,
+                  HFTabBar.reservedHeight(context) + 20,
+                ),
                 children: [
                   const HeroHeader(
                     eyebrow: 'JOURNAL',
