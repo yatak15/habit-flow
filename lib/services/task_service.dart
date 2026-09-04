@@ -176,44 +176,6 @@ class TaskService extends ChangeNotifier {
     ).fold(0, (sum, l) => sum + l.minutes);
   }
 
-  /// 指定期間内での継続日数（実行日ベース）
-  ///
-  /// Task.currentStreak は月をまたいでも途切れずにカウントされる「全期間」の
-  /// 継続日数であるため、「今週」「今月」タブでそのまま表示すると
-  /// 期間開始日より前の分まで含んでしまい、実際にその期間内で達成した日数より
-  /// 多く表示されてしまう（例：本日が9/4でも先月分を含めて5日と出てしまう）。
-  /// ここでは完了ログの実行日を元に、期間開始日をまたがない範囲で
-  /// 直近から連続している日数のみを数え直す。
-  int streakWithinPeriod(String taskId, DateTime periodStart) {
-    final dates =
-        logsForTask(taskId)
-            .map(
-              (l) => DateTime(
-                l.completedAt.year,
-                l.completedAt.month,
-                l.completedAt.day,
-              ),
-            )
-            .toSet()
-            .toList()
-          ..sort((a, b) => b.compareTo(a)); // 新しい日付順
-
-    int streak = 0;
-    DateTime? cursor;
-    for (final d in dates) {
-      if (d.isBefore(periodStart)) break;
-      if (cursor == null) {
-        streak = 1;
-      } else {
-        final diff = cursor.difference(d).inDays;
-        if (diff != 1) break; // 連続が途切れた
-        streak += 1;
-      }
-      cursor = d;
-    }
-    return streak;
-  }
-
   DateTime get startOfWeek => _startOfWeek;
   DateTime get startOfMonth => _startOfMonth;
 

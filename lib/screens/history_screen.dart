@@ -55,11 +55,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       child: _HistoryRowCard(
                         task: task,
                         executionCount: _executionCountFor(taskService, task),
-                        currentStreak: _currentStreakFor(taskService, task),
                         cumulativeMinutes: _cumulativeMinutesFor(
                           taskService,
                           task,
                         ),
+                        emphasizeExecution: _segment != _HistorySegment.all,
                         onReset: () => _confirmReset(context, taskService, task),
                       ),
                     ),
@@ -94,19 +94,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return service.logsForTaskSince(task.id, service.startOfWeek).length;
       case _HistorySegment.month:
         return service.logsForTaskSince(task.id, service.startOfMonth).length;
-    }
-  }
-
-  /// タブ（すべて/今週/今月）に応じた継続日数
-  /// 「今週」「今月」は期間の開始日をまたいだ分を含めない（要修正報告 #4 対応）
-  int _currentStreakFor(TaskService service, Task task) {
-    switch (_segment) {
-      case _HistorySegment.all:
-        return task.currentStreak;
-      case _HistorySegment.week:
-        return service.streakWithinPeriod(task.id, service.startOfWeek);
-      case _HistorySegment.month:
-        return service.streakWithinPeriod(task.id, service.startOfMonth);
     }
   }
 
@@ -205,14 +192,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
 class _HistoryRowCard extends StatelessWidget {
   final Task task;
   final int executionCount;
-  final int currentStreak;
   final int cumulativeMinutes;
+  final bool emphasizeExecution;
   final VoidCallback onReset;
   const _HistoryRowCard({
     required this.task,
     required this.executionCount,
-    required this.currentStreak,
     required this.cumulativeMinutes,
+    required this.emphasizeExecution,
     required this.onReset,
   });
 
@@ -267,24 +254,70 @@ class _HistoryRowCard extends StatelessWidget {
           const SizedBox(height: 14),
           const Divider(height: 1, color: AppColors.line),
           const SizedBox(height: 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _heroMetric('CURRENT', '$currentStreak', '日'),
-              const SizedBox(width: 20),
-              _subMetric('実行', '$executionCount', '回'),
-              const SizedBox(width: 20),
-              _subMetric('最長', '${task.bestStreak}', '日'),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '累計時間 ${_formatMinutes(cumulativeMinutes)}',
-            style: AppText.subMeta,
-          ),
+          _buildMetrics(),
         ],
       ),
     );
+  }
+
+  /// CURRENT（累計の継続日数）は常に全期間の値。
+  /// 「今週」「今月」タブでは期間内の実行回数の方が意味のある数値なので、
+  /// そちらを大きく表示し、CURRENTは他の数値と同じ大きさで添える。
+  Widget _buildMetrics() {
+    final currentMetric = _metric(
+      label: 'CURRENT',
+      value: '${task.currentStreak}',
+      suffix: '日',
+      hero: !emphasizeExecution,
+    );
+    final executionMetric = _metric(
+      label: '実行',
+      value: '$executionCount',
+      suffix: '回',
+      hero: emphasizeExecution,
+    );
+    final bestMetric = _metric(
+      label: '最長',
+      value: '${task.bestStreak}',
+      suffix: '日',
+      hero: false,
+    );
+    final cumulativeTimeMetric = _metric(
+      label: '累計時間',
+      value: _formatMinutes(cumulativeMinutes),
+      suffix: '',
+      hero: false,
+    );
+
+    final heroMetric = emphasizeExecution ? executionMetric : currentMetric;
+    final otherMetric = emphasizeExecution ? currentMetric : executionMetric;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        heroMetric,
+        const SizedBox(width: 20),
+        Expanded(
+          child: Wrap(
+            spacing: 20,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            children: [otherMetric, bestMetric, cumulativeTimeMetric],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _metric({
+    required String label,
+    required String value,
+    required String suffix,
+    required bool hero,
+  }) {
+    return hero
+        ? _heroMetric(label, value, suffix)
+        : _subMetric(label, value, suffix);
   }
 
   Widget _buildResetButton(BuildContext context) {
