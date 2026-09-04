@@ -55,6 +55,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       child: _HistoryRowCard(
                         task: task,
                         executionCount: _executionCountFor(taskService, task),
+                        currentStreak: _currentStreakFor(taskService, task),
+                        cumulativeMinutes: _cumulativeMinutesFor(
+                          taskService,
+                          task,
+                        ),
+                        onReset: () => _confirmReset(context, taskService, task),
                       ),
                     ),
                   ),
@@ -88,6 +94,66 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return service.logsForTaskSince(task.id, service.startOfWeek).length;
       case _HistorySegment.month:
         return service.logsForTaskSince(task.id, service.startOfMonth).length;
+    }
+  }
+
+  /// タブ（すべて/今週/今月）に応じた継続日数
+  /// 「今週」「今月」は期間の開始日をまたいだ分を含めない（要修正報告 #4 対応）
+  int _currentStreakFor(TaskService service, Task task) {
+    switch (_segment) {
+      case _HistorySegment.all:
+        return task.currentStreak;
+      case _HistorySegment.week:
+        return service.streakWithinPeriod(task.id, service.startOfWeek);
+      case _HistorySegment.month:
+        return service.streakWithinPeriod(task.id, service.startOfMonth);
+    }
+  }
+
+  int _cumulativeMinutesFor(TaskService service, Task task) {
+    switch (_segment) {
+      case _HistorySegment.all:
+        return task.cumulativeMinutes;
+      case _HistorySegment.week:
+        return service.cumulativeMinutesSince(task.id, service.startOfWeek);
+      case _HistorySegment.month:
+        return service.cumulativeMinutesSince(task.id, service.startOfMonth);
+    }
+  }
+
+  Future<void> _confirmReset(
+    BuildContext context,
+    TaskService service,
+    Task task,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.cream,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('記録をリセット'),
+        content: Text(
+          '「${task.name}」の継続日数・実行回数・累積時間・最長記録をすべて0に戻します。\n'
+          'この操作は取り消せません（履歴の完了ログは保持されます）。',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'リセットする',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await service.resetTask(task.id);
     }
   }
 
@@ -139,7 +205,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
 class _HistoryRowCard extends StatelessWidget {
   final Task task;
   final int executionCount;
-  const _HistoryRowCard({required this.task, required this.executionCount});
+  final int currentStreak;
+  final int cumulativeMinutes;
+  final VoidCallback onReset;
+  const _HistoryRowCard({
+    required this.task,
+    required this.executionCount,
+    required this.currentStreak,
+    required this.cumulativeMinutes,
+    required this.onReset,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -182,7 +257,11 @@ class _HistoryRowCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (currentPrize != null) _buildPrizeBadge(currentPrize.title),
+              if (currentPrize != null) ...[
+                _buildPrizeBadge(currentPrize.title),
+                const SizedBox(width: 4),
+              ],
+              _buildResetButton(context),
             ],
           ),
           const SizedBox(height: 14),
@@ -191,16 +270,48 @@ class _HistoryRowCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              _heroMetric('CURRENT', '${task.currentStreak}', '日'),
+              _heroMetric('CURRENT', '$currentStreak', '日'),
               const SizedBox(width: 20),
               _subMetric('実行', '$executionCount', '回'),
               const SizedBox(width: 20),
               _subMetric('最長', '${task.bestStreak}', '日'),
             ],
           ),
+          const SizedBox(height: 12),
+          Text(
+            '累計時間 ${_formatMinutes(cumulativeMinutes)}',
+            style: AppText.subMeta,
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildResetButton(BuildContext context) {
+    return SizedBox(
+      width: 28,
+      height: 28,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        icon: const Icon(
+          Icons.restart_alt,
+          size: 18,
+          color: AppColors.inkMuted,
+        ),
+        tooltip: 'この記録をリセット',
+        onPressed: onReset,
+      ),
+    );
+  }
+
+  String _formatMinutes(int totalMinutes) {
+    if (totalMinutes <= 0) return '0分';
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (hours == 0) return '$minutes分';
+    if (minutes == 0) return '$hours時間';
+    return '$hours時間$minutes分';
   }
 
   Widget _buildPrizeBadge(String title) {

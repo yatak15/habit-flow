@@ -24,13 +24,14 @@ class TaskAdapter extends TypeAdapter<Task> {
       bestStreak: fields[7] as int,
       lastCompletedDate: fields[8] as DateTime?,
       createdAt: fields[9] as DateTime,
+      cumulativeMinutes: fields[10] == null ? 0 : fields[10] as int,
     );
   }
 
   @override
   void write(BinaryWriter writer, Task obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -50,7 +51,9 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..writeByte(8)
       ..write(obj.lastCompletedDate)
       ..writeByte(9)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(10)
+      ..write(obj.cumulativeMinutes);
   }
 
   @override

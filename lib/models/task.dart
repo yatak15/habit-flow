@@ -36,6 +36,9 @@ class Task extends HiveObject {
   @HiveField(9)
   DateTime createdAt;
 
+  @HiveField(10)
+  int cumulativeMinutes; // 累積実行時間（分）
+
   Task({
     required this.id,
     required this.name,
@@ -47,7 +50,17 @@ class Task extends HiveObject {
     this.bestStreak = 0,
     this.lastCompletedDate,
     DateTime? createdAt,
+    this.cumulativeMinutes = 0,
   }) : createdAt = createdAt ?? DateTime.now();
+
+  /// タスク単体の実績をリセットする（累積時間・実行回数・継続日数・最長記録を初期化）
+  void resetStats() {
+    totalCount = 0;
+    currentStreak = 0;
+    bestStreak = 0;
+    cumulativeMinutes = 0;
+    lastCompletedDate = null;
+  }
 
   TaskIconType get iconType => TaskIconType.values[iconIndex];
 }

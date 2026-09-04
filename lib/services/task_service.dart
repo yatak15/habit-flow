@@ -98,6 +98,7 @@ class TaskService extends ChangeNotifier {
     }
 
     task.totalCount += 1;
+    task.cumulativeMinutes += minutes;
     task.lastCompletedDate = today;
     task.lastMemo = memo;
     await task.save();
@@ -119,6 +120,16 @@ class TaskService extends ChangeNotifier {
   /// タスクごとの完了回数一覧（履歴ページ用）
   List<CompletionLog> logsForTask(String taskId) {
     return logs.where((l) => l.taskId == taskId).toList();
+  }
+
+  /// 個別タスクの実績（累積時間・実行回数・継続日数・最長記録）をリセットする
+  /// ※完了ログ（履歴）自体は削除しない
+  Future<void> resetTask(String taskId) async {
+    final task = getTask(taskId);
+    if (task == null) return;
+    task.resetStats();
+    await task.save();
+    notifyListeners();
   }
 
   DateTime get _startOfWeek {
@@ -155,6 +166,52 @@ class TaskService extends ChangeNotifier {
     return logsForTask(
       taskId,
     ).where((l) => !l.completedAt.isBefore(since)).toList();
+  }
+
+  /// 指定期間内での累積実行時間（分）
+  int cumulativeMinutesSince(String taskId, DateTime since) {
+    return logsForTaskSince(
+      taskId,
+      since,
+    ).fold(0, (sum, l) => sum + l.minutes);
+  }
+
+  /// 指定期間内での継続日数（実行日ベース）
+  ///
+  /// Task.currentStreak は月をまたいでも途切れずにカウントされる「全期間」の
+  /// 継続日数であるため、「今週」「今月」タブでそのまま表示すると
+  /// 期間開始日より前の分まで含んでしまい、実際にその期間内で達成した日数より
+  /// 多く表示されてしまう（例：本日が9/4でも先月分を含めて5日と出てしまう）。
+  /// ここでは完了ログの実行日を元に、期間開始日をまたがない範囲で
+  /// 直近から連続している日数のみを数え直す。
+  int streakWithinPeriod(String taskId, DateTime periodStart) {
+    final dates =
+        logsForTask(taskId)
+            .map(
+              (l) => DateTime(
+                l.completedAt.year,
+                l.completedAt.month,
+                l.completedAt.day,
+              ),
+            )
+            .toSet()
+            .toList()
+          ..sort((a, b) => b.compareTo(a)); // 新しい日付順
+
+    int streak = 0;
+    DateTime? cursor;
+    for (final d in dates) {
+      if (d.isBefore(periodStart)) break;
+      if (cursor == null) {
+        streak = 1;
+      } else {
+        final diff = cursor.difference(d).inDays;
+        if (diff != 1) break; // 連続が途切れた
+        streak += 1;
+      }
+      cursor = d;
+    }
+    return streak;
   }
 
   DateTime get startOfWeek => _startOfWeek;
