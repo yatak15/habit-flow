@@ -1,6 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/task_icon.dart';
+import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 
 /// "Quiet Momentum" デザインシステム共通コンポーネント群
@@ -113,6 +115,8 @@ class TaskCardWidget extends StatelessWidget {
   final int streak;
   final bool selected;
   final bool compact;
+  final bool isAbstain;
+  final double? size;
   final VoidCallback onTap;
 
   const TaskCardWidget({
@@ -123,12 +127,17 @@ class TaskCardWidget extends StatelessWidget {
     required this.onTap,
     this.selected = false,
     this.compact = false,
+    this.isAbstain = false,
+    this.size,
   });
 
   @override
   Widget build(BuildContext context) {
-    final double h = compact ? 108 : 132;
-    final double w = compact ? 108 : 132;
+    final double h = size ?? (compact ? 108 : 132);
+    final double w = size ?? (compact ? 108 : 132);
+    final Color deepAccent = isAbstain ? AppColors.slateDeep : AppColors.sageDeep;
+    final Color bgAccent = isAbstain ? AppColors.slateBg : AppColors.sageBg;
+    final Color dotAccent = isAbstain ? AppColors.slate : AppColors.sage;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -137,7 +146,7 @@ class TaskCardWidget extends StatelessWidget {
         height: h,
         padding: const EdgeInsets.fromLTRB(14, 14, 12, 12),
         decoration: BoxDecoration(
-          color: selected ? AppColors.sageDeep : AppColors.surface,
+          color: selected ? deepAccent : AppColors.surface,
           borderRadius: BorderRadius.circular(22),
           border: selected ? null : Border.all(color: AppColors.line),
           boxShadow: selected ? AppShadows.selectedCard : AppShadows.card,
@@ -152,14 +161,14 @@ class TaskCardWidget extends StatelessWidget {
               decoration: BoxDecoration(
                 color: selected
                     ? Colors.white.withValues(alpha: 0.18)
-                    : AppColors.sageBg,
+                    : bgAccent,
                 borderRadius: BorderRadius.circular(12),
               ),
               alignment: Alignment.center,
               child: Icon(
                 TaskIconData.of(icon).icon,
                 size: 20,
-                color: selected ? Colors.white : AppColors.sageDeep,
+                color: selected ? Colors.white : deepAccent,
               ),
             ),
             Column(
@@ -183,7 +192,7 @@ class TaskCardWidget extends StatelessWidget {
                         height: 5,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: selected ? Colors.white : AppColors.sage,
+                          color: selected ? Colors.white : dotAccent,
                         ),
                       ),
                       const SizedBox(width: 4),
@@ -210,17 +219,19 @@ class TaskCardWidget extends StatelessWidget {
 /// タスク追加カード（点線ボーダー）
 class AddTaskCardWidget extends StatelessWidget {
   final bool compact;
+  final double? size;
   final VoidCallback onTap;
 
   const AddTaskCardWidget({
     super.key,
     this.compact = false,
+    this.size,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final double size = compact ? 108 : 132;
+    final double size = this.size ?? (compact ? 108 : 132);
     return GestureDetector(
       onTap: onTap,
       child: CustomPaint(
@@ -466,6 +477,7 @@ class HFTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bgColor = context.watch<ThemeService>().backgroundColor;
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -475,7 +487,7 @@ class HFTabBar extends StatelessWidget {
             bottom: MediaQuery.of(context).padding.bottom + 6,
           ),
           decoration: BoxDecoration(
-            color: AppColors.bg.withValues(alpha: 0.92),
+            color: bgColor.withValues(alpha: 0.92),
             border: const Border(top: BorderSide(color: AppColors.line)),
           ),
           child: Row(
@@ -483,6 +495,7 @@ class HFTabBar extends StatelessWidget {
             children: [
               _tabItem(icon: Icons.home_rounded, label: 'ホーム', index: 0),
               _tabItem(icon: Icons.bar_chart_rounded, label: '履歴', index: 1),
+              _tabItem(icon: Icons.settings_outlined, label: '設定', index: 2),
             ],
           ),
         ),

@@ -22,6 +22,11 @@ class AppColors {
   static const Color terracotta = Color(0xFFC67A54);
   static const Color terraSoft = Color(0xFFF3E1D5);
 
+  // Slate（「やめたい習慣」用アクセント。Sageと区別のつく落ち着いた青系）
+  static const Color slate = Color(0xFF6E8CA0);
+  static const Color slateDeep = Color(0xFF4C6B7F);
+  static const Color slateBg = Color(0xFFE7EEF2);
+
   // 互換エイリアス（既存コードとの橋渡し用）
   static const Color sageDark = sageDeep;
   static const Color sageLight = sageSoft;
@@ -199,23 +204,28 @@ class AppText {
 }
 
 class AppTheme {
-  static ThemeData get theme {
+  static ThemeData get theme => themeFor(AppColors.bg);
+
+  /// [background]をアプリ全体の背景色として使うThemeDataを構築する
+  /// （設定画面で背景色を選べるようにするため、AppColors.bg固定ではなく
+  /// 動的な色を受け取れるようにしている）
+  static ThemeData themeFor(Color background) {
     return ThemeData(
       useMaterial3: true,
-      scaffoldBackgroundColor: AppColors.bg,
+      scaffoldBackgroundColor: background,
       fontFamily: '.SF Pro Text',
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.sage,
         brightness: Brightness.light,
-        surface: AppColors.bg,
+        surface: background,
       ),
       textTheme: const TextTheme(
         headlineMedium: AppText.heroHome,
         titleLarge: AppText.h2Section,
         bodyMedium: AppText.body,
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.bg,
+      appBarTheme: AppBarTheme(
+        backgroundColor: background,
         foregroundColor: AppColors.ink,
         elevation: 0,
         centerTitle: true,
@@ -229,7 +239,7 @@ class AppTheme {
         ),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: AppColors.bg,
+        backgroundColor: background,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(

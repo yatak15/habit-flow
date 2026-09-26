@@ -7,6 +7,9 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'models/task.dart';
 import 'models/completion_log.dart';
 import 'services/task_service.dart';
+import 'services/sync_service.dart';
+import 'services/notification_service.dart';
+import 'services/theme_service.dart';
 import 'theme/app_theme.dart';
 import 'screens/main_navigation.dart';
 
@@ -28,15 +31,42 @@ Future<void> main() async {
   final taskService = TaskService();
   await taskService.init();
 
+  final themeService = ThemeService();
+  await themeService.init();
+
+  // アカウント・端末間同期（Supabase 未設定の場合は何もしない）
+  final syncService = SyncService(taskService);
+  try {
+    await syncService.init();
+  } catch (e) {
+    debugPrint('Supabase init failed: $e');
+  }
+
+  // タイマー終了をバックグラウンドでも通知できるよう初期化しておく
+  await NotificationService.instance.init();
+
   // アプリ起動中は画面を常にオンに保つ
   await WakelockPlus.enable();
 
-  runApp(HabitFlowApp(taskService: taskService));
+  runApp(
+    HabitFlowApp(
+      taskService: taskService,
+      themeService: themeService,
+      syncService: syncService,
+    ),
+  );
 }
 
 class HabitFlowApp extends StatefulWidget {
   final TaskService taskService;
-  const HabitFlowApp({super.key, required this.taskService});
+  final ThemeService themeService;
+  final SyncService syncService;
+  const HabitFlowApp({
+    super.key,
+    required this.taskService,
+    required this.themeService,
+    required this.syncService,
+  });
 
   @override
   State<HabitFlowApp> createState() => _HabitFlowAppState();
@@ -63,6 +93,7 @@ class _HabitFlowAppState extends State<HabitFlowApp>
     // フォアグラウンドに復帰した際は再度有効化する（バッテリー配慮）
     if (state == AppLifecycleState.resumed) {
       WakelockPlus.enable();
+      widget.syncService.sync();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
@@ -72,13 +103,19 @@ class _HabitFlowAppState extends State<HabitFlowApp>
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: widget.taskService,
-      child: MaterialApp(
-        title: 'Habit Flow',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.theme,
-        home: const MainNavigation(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: widget.taskService),
+        ChangeNotifierProvider.value(value: widget.themeService),
+        ChangeNotifierProvider.value(value: widget.syncService),
+      ],
+      child: Consumer<ThemeService>(
+        builder: (context, themeService, _) => MaterialApp(
+          title: 'ととのね',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.themeFor(themeService.backgroundColor),
+          home: const MainNavigation(),
+        ),
       ),
     );
   }

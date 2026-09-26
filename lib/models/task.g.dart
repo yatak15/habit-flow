@@ -25,13 +25,22 @@ class TaskAdapter extends TypeAdapter<Task> {
       lastCompletedDate: fields[8] as DateTime?,
       createdAt: fields[9] as DateTime,
       cumulativeMinutes: fields[10] == null ? 0 : fields[10] as int,
+      modeIndex: fields[11] == null ? 0 : fields[11] as int,
+      trackFitness: fields[12] == null ? false : fields[12] as bool,
+      cumulativeDistanceMeters: fields[13] == null
+          ? 0
+          : fields[13] as double,
+      cumulativeSteps: fields[14] == null ? 0 : fields[14] as int,
+      updatedAt: fields[15] == null
+          ? (fields[9] as DateTime)
+          : fields[15] as DateTime,
     );
   }
 
   @override
   void write(BinaryWriter writer, Task obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -53,7 +62,17 @@ class TaskAdapter extends TypeAdapter<Task> {
       ..writeByte(9)
       ..write(obj.createdAt)
       ..writeByte(10)
-      ..write(obj.cumulativeMinutes);
+      ..write(obj.cumulativeMinutes)
+      ..writeByte(11)
+      ..write(obj.modeIndex)
+      ..writeByte(12)
+      ..write(obj.trackFitness)
+      ..writeByte(13)
+      ..write(obj.cumulativeDistanceMeters)
+      ..writeByte(14)
+      ..write(obj.cumulativeSteps)
+      ..writeByte(15)
+      ..write(obj.updatedAt);
   }
 
   @override

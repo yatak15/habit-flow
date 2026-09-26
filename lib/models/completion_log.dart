@@ -26,6 +26,15 @@ class CompletionLog extends HiveObject {
   @HiveField(6)
   DateTime completedAt;
 
+  @HiveField(7)
+  double? distanceMeters; // 走行距離（ランニングなど、記録した場合のみ）
+
+  @HiveField(8)
+  int? steps; // 歩数（ランニングなど、記録した場合のみ）
+
+  @HiveField(9)
+  DateTime updatedAt; // 最終更新日時（端末間同期の新旧判定に使用）
+
   CompletionLog({
     required this.id,
     required this.taskId,
@@ -34,5 +43,14 @@ class CompletionLog extends HiveObject {
     required this.memo,
     required this.minutes,
     required this.completedAt,
-  });
+    this.distanceMeters,
+    this.steps,
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? DateTime.now();
+
+  @override
+  Future<void> save() {
+    updatedAt = DateTime.now();
+    return super.save();
+  }
 }

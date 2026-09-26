@@ -21,13 +21,18 @@ class CompletionLogAdapter extends TypeAdapter<CompletionLog> {
       memo: fields[4] as String,
       minutes: fields[5] as int,
       completedAt: fields[6] as DateTime,
+      distanceMeters: fields[7] as double?,
+      steps: fields[8] as int?,
+      updatedAt: fields[9] == null
+          ? (fields[6] as DateTime)
+          : fields[9] as DateTime,
     );
   }
 
   @override
   void write(BinaryWriter writer, CompletionLog obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -41,7 +46,13 @@ class CompletionLogAdapter extends TypeAdapter<CompletionLog> {
       ..writeByte(5)
       ..write(obj.minutes)
       ..writeByte(6)
-      ..write(obj.completedAt);
+      ..write(obj.completedAt)
+      ..writeByte(7)
+      ..write(obj.distanceMeters)
+      ..writeByte(8)
+      ..write(obj.steps)
+      ..writeByte(9)
+      ..write(obj.updatedAt);
   }
 
   @override

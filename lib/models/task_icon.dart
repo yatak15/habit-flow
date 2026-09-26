@@ -20,6 +20,8 @@ enum TaskIconType {
   camera,
   leaf,
   star,
+  drink,
+  avoid,
 }
 
 class TaskIconData {
@@ -108,6 +110,16 @@ class TaskIconData {
       type: TaskIconType.star,
       icon: Icons.star_outline,
       label: 'その他',
+    ),
+    TaskIconType.drink: TaskIconData(
+      type: TaskIconType.drink,
+      icon: Icons.local_bar_outlined,
+      label: 'お酒',
+    ),
+    TaskIconType.avoid: TaskIconData(
+      type: TaskIconType.avoid,
+      icon: Icons.block_outlined,
+      label: 'やめたい習慣',
     ),
   };
 
