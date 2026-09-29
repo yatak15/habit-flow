@@ -34,12 +34,12 @@ Future<void> main() async {
   final themeService = ThemeService();
   await themeService.init();
 
-  // アカウント・端末間同期（Supabase 未設定の場合は何もしない）
+  // アカウント・端末間同期（Firebase 未設定の場合は何もしない）
   final syncService = SyncService(taskService);
   try {
     await syncService.init();
   } catch (e) {
-    debugPrint('Supabase init failed: $e');
+    debugPrint('Firebase init failed: $e');
   }
 
   // タイマー終了をバックグラウンドでも通知できるよう初期化しておく

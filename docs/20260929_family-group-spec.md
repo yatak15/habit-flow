@@ -2,7 +2,7 @@
 
 Sep 29, 2026 · @Yasuaki Takei
 
-家族4人までが「毎日の習慣」と「お金の習慣（資産運用の習慣）」を見せ合い、習慣が身についていく過程を称え合う機能です。順位は付けず、食卓の会話のきっかけをつくることを目的とします。アプリ独自の家族グループ（Firebase）で実装し、iPhone・Mac・将来のAndroidをまたいで使えるようにします。
+家族4人までが「毎日の習慣」と「お金の習慣（資産運用の習慣）」を見せ合い、習慣が身についていく過程を称え合う機能です。順位は付けず、食卓の会話のきっかけをつくることを目的とします。アプリ独自の家族グループ（Firebase）で実装し、iPhone・Mac・将来のAndroidをまたいで使えるようにします。個人の習慣の端末間同期もFirebase（Authentication + Cloud Firestore）に統一し、家族機能と同じアカウント・同じデータベースで扱います。
 
 ## 利用の流れ
 
@@ -211,11 +211,16 @@ families/{familyId}/goals/{goalId}
 invites/{code}
   familyId, expiresAt
 
-users/{uid}/habits/{habitId}
+users/{uid}/habits/{habitId}      ※個人の端末間同期（実装済み）
   （既存）＋ shareWithFamily: true / false
           ＋ category: daily / money
           ＋ cycle: daily / weekly / monthly（money のみ weekly・monthly を選べる）
+
+users/{uid}/logs/{logId}          ※個人の完了記録の端末間同期（実装済み）
+  taskId, taskName, memo, minutes, completedAt, updatedAt, deletedAt
 ```
+
+**個人データの同期：** 端末内のデータ（Hive）を正とし、ドキュメントごとに「更新日時が新しい方が勝つ」ルールでマージします。削除は `deletedAt` の削除印で他の端末に伝えます。ルールは `firebase/firestore.rules` に置いています。
 
 **セキュリティルールの原則：**
 

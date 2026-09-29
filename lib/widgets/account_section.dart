@@ -65,8 +65,8 @@ class _AccountSectionState extends State<AccountSection> {
         if (!sync.isConfigured)
           _card(
             child: Text(
-              '同期はまだ設定されていません。lib/config/supabase_config.dart に '
-              'Supabase の接続情報を入力すると、ログインできるようになります。',
+              '同期はまだ設定されていません。lib/config/firebase_config.dart に '
+              'Firebase の接続情報を入力すると、ログインできるようになります。',
               style: AppText.subMeta,
             ),
           )

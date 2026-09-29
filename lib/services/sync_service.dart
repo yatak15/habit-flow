@@ -1,14 +1,18 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/supabase_config.dart';
+import '../config/firebase_config.dart';
 import '../models/completion_log.dart';
 import '../models/task.dart';
 import 'task_service.dart';
 
-/// Supabase を使ったアカウント認証と端末間同期。
-/// 端末内の Hive を正としつつ、行単位で「更新日時が新しい方が勝つ」ルールでマージする。
+/// Firebase（Authentication + Cloud Firestore）を使ったアカウント認証と端末間同期。
+/// 端末内の Hive を正としつつ、ドキュメント単位で「更新日時が新しい方が勝つ」ルールでマージする。
 /// 接続情報が未設定の場合は何もせず、従来どおり端末内のみで動作する。
+///
+/// 保存先: users/{uid}/habits/{taskId}, users/{uid}/logs/{logId}
 class SyncService extends ChangeNotifier {
   SyncService(this._tasks);
 
@@ -20,31 +24,34 @@ class SyncService extends ChangeNotifier {
   String? _lastError;
   Timer? _debounce;
 
-  bool get isConfigured => SupabaseConfig.isConfigured;
+  bool get isConfigured => FirebaseConfig.isConfigured;
   bool get isSyncing => _syncing;
   DateTime? get lastSyncedAt => _lastSyncedAt;
   String? get lastError => _lastError;
 
-  SupabaseClient? get _client => _initialized ? Supabase.instance.client : null;
-  User? get user => _client?.auth.currentUser;
+  FirebaseAuth? get _auth => _initialized ? FirebaseAuth.instance : null;
+  User? get user => _auth?.currentUser;
   bool get isSignedIn => user != null;
   String? get email => user?.email;
 
+  DocumentReference<Map<String, dynamic>> get _userDoc =>
+      FirebaseFirestore.instance.collection('users').doc(user!.uid);
+
   Future<void> init() async {
-    if (!isConfigured) return;
-    await Supabase.initialize(
-      url: SupabaseConfig.url,
-      publishableKey: SupabaseConfig.anonKey,
+    final options = FirebaseConfig.currentPlatform;
+    if (options == null) return;
+    await Firebase.initializeApp(options: options);
+    // 端末内の Hive を正とするため、Firestore 側のオフラインキャッシュは使わない
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: false,
     );
     _initialized = true;
 
-    _client!.auth.onAuthStateChange.listen((data) {
+    _auth!.authStateChanges().listen((u) {
       notifyListeners();
-      if (data.session != null) sync();
+      if (u != null) sync();
     });
     _tasks.addListener(_onLocalChange);
-
-    if (isSignedIn) unawaited(sync());
   }
 
   void _onLocalChange() {
@@ -56,33 +63,45 @@ class SyncService extends ChangeNotifier {
   /// 成功時は null、失敗時は表示用のメッセージを返す
   Future<String?> signIn(String email, String password) async {
     try {
-      await _client!.auth.signInWithPassword(email: email, password: password);
+      await _auth!.signInWithEmailAndPassword(email: email, password: password);
       return null;
-    } on AuthException catch (e) {
-      return e.message;
+    } on FirebaseAuthException catch (e) {
+      return _authMessage(e);
     } catch (e) {
       return '通信に失敗しました。ネットワークを確認してください。';
     }
   }
 
-  /// 成功時は null。メール確認が必要な設定の場合はその旨のメッセージを返す
+  /// 成功時は null（登録と同時にログインする）
   Future<String?> signUp(String email, String password) async {
     try {
-      final res = await _client!.auth.signUp(email: email, password: password);
-      if (res.session == null) {
-        return '確認メールを送信しました。メール内のリンクを開いたあと、ログインしてください。';
-      }
+      await _auth!.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
       return null;
-    } on AuthException catch (e) {
-      return e.message;
+    } on FirebaseAuthException catch (e) {
+      return _authMessage(e);
     } catch (e) {
       return '通信に失敗しました。ネットワークを確認してください。';
     }
   }
+
+  String _authMessage(FirebaseAuthException e) => switch (e.code) {
+    'invalid-email' => 'メールアドレスの形式が正しくありません。',
+    'invalid-credential' ||
+    'wrong-password' ||
+    'user-not-found' => 'メールアドレスまたはパスワードが違います。',
+    'email-already-in-use' => 'このメールアドレスはすでに登録されています。ログインしてください。',
+    'weak-password' => 'パスワードは6文字以上にしてください。',
+    'too-many-requests' => '試行回数が多すぎます。しばらくしてからお試しください。',
+    'network-request-failed' => '通信に失敗しました。ネットワークを確認してください。',
+    _ => e.message ?? 'ログインに失敗しました。',
+  };
 
   Future<void> signOut() async {
     _debounce?.cancel();
-    await _client?.auth.signOut();
+    await _auth?.signOut();
     _lastSyncedAt = null;
     _lastError = null;
     notifyListeners();
@@ -110,169 +129,185 @@ class SyncService extends ChangeNotifier {
     }
   }
 
-  // ---- 削除の反映（削除印 deleted_at を付ける） ----
+  /// 1回のバッチ書き込みは500件までのため、分割して書き込む
+  Future<void> _commitAll(
+    CollectionReference<Map<String, dynamic>> col,
+    List<Map<String, dynamic>> docs,
+  ) async {
+    for (var i = 0; i < docs.length; i += 500) {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final d in docs.skip(i).take(500)) {
+        batch.set(col.doc(d['id'] as String), d);
+      }
+      await batch.commit();
+    }
+  }
+
+  // ---- 削除の反映（削除印 deletedAt を付ける） ----
 
   Future<void> _pushDeletions() async {
     final pending = _tasks.pendingDeletes;
     if (pending.isEmpty) return;
-    final c = _client!;
+    final batch = FirebaseFirestore.instance.batch();
     for (final entry in pending.entries) {
       final sep = entry.key.indexOf(':');
-      final table = entry.key.substring(0, sep) == 'tasks'
-          ? 'tasks'
-          : 'completion_logs';
+      final collection = entry.key.substring(0, sep) == 'tasks'
+          ? 'habits'
+          : 'logs';
       final id = entry.key.substring(sep + 1);
-      await c
-          .from(table)
-          .update({'deleted_at': entry.value, 'updated_at': entry.value})
-          .eq('id', id);
+      final at = Timestamp.fromDate(DateTime.parse(entry.value));
+      batch.set(_userDoc.collection(collection).doc(id), {
+        'id': id,
+        'deletedAt': at,
+        'updatedAt': at,
+      }, SetOptions(merge: true));
     }
+    await batch.commit();
     await _tasks.clearPendingDeletes(pending.keys);
   }
 
   // ---- タスク ----
 
   Future<void> _syncTasks() async {
-    final c = _client!;
-    final remote = await c.from('tasks').select();
+    final col = _userDoc.collection('habits');
+    final remote = await col.get();
     final local = {for (final t in _tasks.allTasks) t.id: t};
     final remoteIds = <String>{};
     final toPush = <Map<String, dynamic>>[];
 
-    for (final r in remote) {
-      final id = r['id'] as String;
+    for (final doc in remote.docs) {
+      final r = doc.data();
+      final id = doc.id;
       remoteIds.add(id);
-      final remoteUpdated = _dt(r['updated_at'])!;
-      final deletedAt = _dt(r['deleted_at']);
+      final remoteUpdated = _dt(r['updatedAt'])!;
+      final deletedAt = _dt(r['deletedAt']);
       final l = local[id];
 
       if (deletedAt != null) {
         if (l == null) continue;
         if (l.updatedAt.isAfter(deletedAt)) {
-          toPush.add(_taskToRow(l));
+          toPush.add(_taskToDoc(l));
         } else {
           await _tasks.removeLocalTask(id);
         }
       } else if (l == null || remoteUpdated.isAfter(l.updatedAt)) {
-        await _tasks.applyRemoteTask(_taskFromRow(r));
+        await _tasks.applyRemoteTask(_taskFromDoc(id, r));
       } else if (l.updatedAt.isAfter(remoteUpdated)) {
-        toPush.add(_taskToRow(l));
+        toPush.add(_taskToDoc(l));
       }
     }
     for (final l in local.values) {
-      if (!remoteIds.contains(l.id)) toPush.add(_taskToRow(l));
+      if (!remoteIds.contains(l.id)) toPush.add(_taskToDoc(l));
     }
-    if (toPush.isNotEmpty) {
-      await c.from('tasks').upsert(toPush, onConflict: 'user_id,id');
-    }
+    await _commitAll(col, toPush);
   }
 
-  Map<String, dynamic> _taskToRow(Task t) => {
+  Map<String, dynamic> _taskToDoc(Task t) => {
     'id': t.id,
     'name': t.name,
-    'icon_index': t.iconIndex,
-    'default_minutes': t.defaultMinutes,
-    'last_memo': t.lastMemo,
-    'total_count': t.totalCount,
-    'current_streak': t.currentStreak,
-    'best_streak': t.bestStreak,
-    'last_completed_date': t.lastCompletedDate?.toUtc().toIso8601String(),
-    'created_at': t.createdAt.toUtc().toIso8601String(),
-    'cumulative_minutes': t.cumulativeMinutes,
-    'mode_index': t.modeIndex,
-    'track_fitness': t.trackFitness,
-    'cumulative_distance_meters': t.cumulativeDistanceMeters,
-    'cumulative_steps': t.cumulativeSteps,
-    'updated_at': t.updatedAt.toUtc().toIso8601String(),
-    'deleted_at': null,
+    'iconIndex': t.iconIndex,
+    'defaultMinutes': t.defaultMinutes,
+    'lastMemo': t.lastMemo,
+    'totalCount': t.totalCount,
+    'currentStreak': t.currentStreak,
+    'bestStreak': t.bestStreak,
+    'lastCompletedDate': _ts(t.lastCompletedDate),
+    'createdAt': _ts(t.createdAt),
+    'cumulativeMinutes': t.cumulativeMinutes,
+    'modeIndex': t.modeIndex,
+    'trackFitness': t.trackFitness,
+    'cumulativeDistanceMeters': t.cumulativeDistanceMeters,
+    'cumulativeSteps': t.cumulativeSteps,
+    'updatedAt': _ts(t.updatedAt),
+    'deletedAt': null,
   };
 
-  Task _taskFromRow(Map<String, dynamic> r) => Task(
-    id: r['id'] as String,
+  Task _taskFromDoc(String id, Map<String, dynamic> r) => Task(
+    id: id,
     name: r['name'] as String,
-    iconIndex: r['icon_index'] as int,
-    defaultMinutes: r['default_minutes'] as int,
-    lastMemo: r['last_memo'] as String,
-    totalCount: r['total_count'] as int,
-    currentStreak: r['current_streak'] as int,
-    bestStreak: r['best_streak'] as int,
-    lastCompletedDate: _dt(r['last_completed_date']),
-    createdAt: _dt(r['created_at'])!,
-    cumulativeMinutes: r['cumulative_minutes'] as int,
-    modeIndex: r['mode_index'] as int,
-    trackFitness: r['track_fitness'] as bool,
-    cumulativeDistanceMeters: (r['cumulative_distance_meters'] as num)
+    iconIndex: r['iconIndex'] as int,
+    defaultMinutes: r['defaultMinutes'] as int,
+    lastMemo: r['lastMemo'] as String,
+    totalCount: r['totalCount'] as int,
+    currentStreak: r['currentStreak'] as int,
+    bestStreak: r['bestStreak'] as int,
+    lastCompletedDate: _dt(r['lastCompletedDate']),
+    createdAt: _dt(r['createdAt'])!,
+    cumulativeMinutes: r['cumulativeMinutes'] as int,
+    modeIndex: r['modeIndex'] as int,
+    trackFitness: r['trackFitness'] as bool,
+    cumulativeDistanceMeters: (r['cumulativeDistanceMeters'] as num)
         .toDouble(),
-    cumulativeSteps: r['cumulative_steps'] as int,
-    updatedAt: _dt(r['updated_at'])!,
+    cumulativeSteps: r['cumulativeSteps'] as int,
+    updatedAt: _dt(r['updatedAt'])!,
   );
 
   // ---- 完了ログ ----
 
   Future<void> _syncLogs() async {
-    final c = _client!;
-    final remote = await c.from('completion_logs').select();
+    final col = _userDoc.collection('logs');
+    final remote = await col.get();
     final local = {for (final l in _tasks.allLogs) l.id: l};
     final remoteIds = <String>{};
     final toPush = <Map<String, dynamic>>[];
 
-    for (final r in remote) {
-      final id = r['id'] as String;
+    for (final doc in remote.docs) {
+      final r = doc.data();
+      final id = doc.id;
       remoteIds.add(id);
-      final remoteUpdated = _dt(r['updated_at'])!;
-      final deletedAt = _dt(r['deleted_at']);
+      final remoteUpdated = _dt(r['updatedAt'])!;
+      final deletedAt = _dt(r['deletedAt']);
       final l = local[id];
 
       if (deletedAt != null) {
         if (l == null) continue;
         if (l.updatedAt.isAfter(deletedAt)) {
-          toPush.add(_logToRow(l));
+          toPush.add(_logToDoc(l));
         } else {
           await _tasks.removeLocalLog(id);
         }
       } else if (l == null || remoteUpdated.isAfter(l.updatedAt)) {
-        await _tasks.applyRemoteLog(_logFromRow(r));
+        await _tasks.applyRemoteLog(_logFromDoc(id, r));
       } else if (l.updatedAt.isAfter(remoteUpdated)) {
-        toPush.add(_logToRow(l));
+        toPush.add(_logToDoc(l));
       }
     }
     for (final l in local.values) {
-      if (!remoteIds.contains(l.id)) toPush.add(_logToRow(l));
+      if (!remoteIds.contains(l.id)) toPush.add(_logToDoc(l));
     }
-    if (toPush.isNotEmpty) {
-      await c.from('completion_logs').upsert(toPush, onConflict: 'user_id,id');
-    }
+    await _commitAll(col, toPush);
   }
 
-  Map<String, dynamic> _logToRow(CompletionLog l) => {
+  Map<String, dynamic> _logToDoc(CompletionLog l) => {
     'id': l.id,
-    'task_id': l.taskId,
-    'task_name': l.taskName,
-    'icon_index': l.iconIndex,
+    'taskId': l.taskId,
+    'taskName': l.taskName,
+    'iconIndex': l.iconIndex,
     'memo': l.memo,
     'minutes': l.minutes,
-    'completed_at': l.completedAt.toUtc().toIso8601String(),
-    'distance_meters': l.distanceMeters,
+    'completedAt': _ts(l.completedAt),
+    'distanceMeters': l.distanceMeters,
     'steps': l.steps,
-    'updated_at': l.updatedAt.toUtc().toIso8601String(),
-    'deleted_at': null,
+    'updatedAt': _ts(l.updatedAt),
+    'deletedAt': null,
   };
 
-  CompletionLog _logFromRow(Map<String, dynamic> r) => CompletionLog(
-    id: r['id'] as String,
-    taskId: r['task_id'] as String,
-    taskName: r['task_name'] as String,
-    iconIndex: r['icon_index'] as int,
+  CompletionLog _logFromDoc(String id, Map<String, dynamic> r) => CompletionLog(
+    id: id,
+    taskId: r['taskId'] as String,
+    taskName: r['taskName'] as String,
+    iconIndex: r['iconIndex'] as int,
     memo: r['memo'] as String,
     minutes: r['minutes'] as int,
-    completedAt: _dt(r['completed_at'])!,
-    distanceMeters: (r['distance_meters'] as num?)?.toDouble(),
+    completedAt: _dt(r['completedAt'])!,
+    distanceMeters: (r['distanceMeters'] as num?)?.toDouble(),
     steps: r['steps'] as int?,
-    updatedAt: _dt(r['updated_at'])!,
+    updatedAt: _dt(r['updatedAt'])!,
   );
 
-  DateTime? _dt(dynamic v) =>
-      v == null ? null : DateTime.parse(v as String).toLocal();
+  Timestamp? _ts(DateTime? d) => d == null ? null : Timestamp.fromDate(d);
+
+  DateTime? _dt(dynamic v) => (v as Timestamp?)?.toDate();
 
   @override
   void dispose() {
